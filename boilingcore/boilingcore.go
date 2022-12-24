@@ -12,12 +12,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/clerkinc/sqlboiler/v4/drivers"
+	"github.com/clerkinc/sqlboiler/v4/importers"
+	boiltemplates "github.com/clerkinc/sqlboiler/v4/templates"
 	"github.com/friendsofgo/errors"
 	"github.com/volatiletech/strmangle"
-
-	"github.com/volatiletech/sqlboiler/v4/drivers"
-	"github.com/volatiletech/sqlboiler/v4/importers"
-	boiltemplates "github.com/volatiletech/sqlboiler/v4/templates"
 )
 
 var (

@@ -13,8 +13,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/clerkinc/sqlboiler/v4/boil"
 	"github.com/friendsofgo/errors"
-	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/strmangle"
 )
 
@@ -52,6 +52,18 @@ func (q *Query) BindG(ctx context.Context, obj interface{}) error {
 	return q.Bind(ctx, boil.GetDB(), obj)
 }
 
+type bindOptions struct {
+	sequentialMapping bool
+}
+
+type BindOption = func(*bindOptions)
+
+func WithSequentialMapping() BindOption {
+	return func(options *bindOptions) {
+		options.sequentialMapping = true
+	}
+}
+
 // Bind inserts the rows into the passed in object pointer, because the caller
 // owns the rows it is imperative to note that the caller MUST both close the
 // rows and check for errors on the rows.
@@ -83,37 +95,37 @@ func (q *Query) BindG(ctx context.Context, obj interface{}) error {
 //
 // Example usage:
 //
-//   type JoinStruct struct {
-//     // User1 can have it's struct fields bound to since it specifies
-//     // ,bind in the struct tag, it will look specifically for
-//     // fields that are prefixed with "user." returning from the query.
-//     // For example "user.id" column name will bind to User1.ID
-//     User1      *models.User `boil:"user,bind"`
-//     // User2 will follow the same rules as noted above except it will use
-//     // "friend." as the prefix it's looking for.
-//     User2      *models.User `boil:"friend,bind"`
-//     // RandomData will not be recursed into to look for fields to
-//     // bind and will not be bound to because of the - for the name.
-//     RandomData myStruct     `boil:"-"`
-//     // Date will not be recursed into to look for fields to bind because
-//     // it does not specify ,bind in the struct tag. But it can be bound to
-//     // as it does not specify a - for the name.
-//     Date       time.Time
-//   }
+//	type JoinStruct struct {
+//	  // User1 can have it's struct fields bound to since it specifies
+//	  // ,bind in the struct tag, it will look specifically for
+//	  // fields that are prefixed with "user." returning from the query.
+//	  // For example "user.id" column name will bind to User1.ID
+//	  User1      *models.User `boil:"user,bind"`
+//	  // User2 will follow the same rules as noted above except it will use
+//	  // "friend." as the prefix it's looking for.
+//	  User2      *models.User `boil:"friend,bind"`
+//	  // RandomData will not be recursed into to look for fields to
+//	  // bind and will not be bound to because of the - for the name.
+//	  RandomData myStruct     `boil:"-"`
+//	  // Date will not be recursed into to look for fields to bind because
+//	  // it does not specify ,bind in the struct tag. But it can be bound to
+//	  // as it does not specify a - for the name.
+//	  Date       time.Time
+//	}
 //
-//   models.Users(
-//     qm.InnerJoin("users as friend on users.friend_id = friend.id")
-//   ).Bind(&joinStruct)
+//	models.Users(
+//	  qm.InnerJoin("users as friend on users.friend_id = friend.id")
+//	).Bind(&joinStruct)
 //
 // For custom objects that want to use eager loading, please see the
 // loadRelationships function.
-func Bind(rows *sql.Rows, obj interface{}) error {
+func Bind(rows *sql.Rows, obj interface{}, options ...BindOption) error {
 	structType, sliceType, singular, err := bindChecks(obj)
 	if err != nil {
 		return err
 	}
 
-	return bind(rows, obj, structType, sliceType, singular)
+	return bind(rows, obj, structType, sliceType, singular, options...)
 }
 
 // Bind executes the query and inserts the
@@ -125,7 +137,7 @@ func Bind(rows *sql.Rows, obj interface{}) error {
 // be using load* methods that support context as the first parameter.
 //
 // Also see documentation for Bind()
-func (q *Query) Bind(ctx context.Context, exec boil.Executor, obj interface{}) error {
+func (q *Query) Bind(ctx context.Context, exec boil.Executor, obj interface{}, options ...BindOption) error {
 	structType, sliceType, bkind, err := bindChecks(obj)
 	if err != nil {
 		return err
@@ -140,7 +152,7 @@ func (q *Query) Bind(ctx context.Context, exec boil.Executor, obj interface{}) e
 	if err != nil {
 		return errors.Wrap(err, "bind failed to execute query")
 	}
-	if err = bind(rows, obj, structType, sliceType, bkind); err != nil {
+	if err = bind(rows, obj, structType, sliceType, bkind, options...); err != nil {
 		if innerErr := rows.Close(); innerErr != nil {
 			return errors.Wrapf(err, "error on rows.Close after bind error: %+v", innerErr)
 		}
@@ -216,7 +228,12 @@ func bindChecks(obj interface{}) (structType reflect.Type, sliceType reflect.Typ
 	}
 }
 
-func bind(rows *sql.Rows, obj interface{}, structType, sliceType reflect.Type, bkind bindKind) error {
+func bind(rows *sql.Rows, obj interface{}, structType, sliceType reflect.Type, bkind bindKind, opts ...BindOption) error {
+	options := bindOptions{}
+	for _, o := range opts {
+		o(&options)
+	}
+
 	cols, err := rows.Columns()
 	if err != nil {
 		return errors.Wrap(err, "bind failed to get column names")
@@ -228,7 +245,7 @@ func bind(rows *sql.Rows, obj interface{}, structType, sliceType reflect.Type, b
 		ptrSlice = reflect.Indirect(reflect.ValueOf(obj))
 	}
 
-	mapping, err := getMappingCache(structType).mapping(cols)
+	mapping, err := getMappingCache(structType).mapping(cols, options.sequentialMapping)
 	if err != nil {
 		return err
 	}
@@ -377,13 +394,14 @@ func ptrFromMapping(val reflect.Value, mapping uint64, addressOf bool) reflect.V
 
 // MakeStructMapping creates a map of the struct to be able to quickly look
 // up its pointers and values by name.
-func MakeStructMapping(typ reflect.Type) map[string]uint64 {
+func MakeStructMapping(typ reflect.Type) (map[string]uint64, []uint64) {
 	fieldMaps := make(map[string]uint64)
-	makeStructMappingHelper(typ, "", 0, 0, fieldMaps)
-	return fieldMaps
+	fieldPtrs := make([]uint64, 0)
+	makeStructMappingHelper(typ, "", 0, 0, fieldMaps, fieldPtrs)
+	return fieldMaps, fieldPtrs
 }
 
-func makeStructMappingHelper(typ reflect.Type, prefix string, current uint64, depth uint, fieldMaps map[string]uint64) {
+func makeStructMappingHelper(typ reflect.Type, prefix string, current uint64, depth uint, fieldMaps map[string]uint64, fieldPtrs []uint64) {
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
 	}
@@ -404,11 +422,13 @@ func makeStructMappingHelper(typ reflect.Type, prefix string, current uint64, de
 		}
 
 		if recurse {
-			makeStructMappingHelper(f.Type, tag, current|uint64(i)<<depth, depth+8, fieldMaps)
+			makeStructMappingHelper(f.Type, tag, current|uint64(i)<<depth, depth+8, fieldMaps, fieldPtrs)
 			continue
 		}
 
-		fieldMaps[tag] = current | (sentinel << (depth + 8)) | (uint64(i) << depth)
+		ptr := current | (sentinel << (depth + 8)) | (uint64(i) << depth)
+		fieldPtrs = append(fieldPtrs, ptr)
+		fieldMaps[tag] = ptr
 	}
 }
 
@@ -455,18 +475,25 @@ type mappingCache struct {
 
 	mu          sync.Mutex
 	structMap   map[string]uint64
+	structPtrs  []uint64
 	colMappings map[string][]uint64
 }
 
 func newMappingCache(typ reflect.Type) *mappingCache {
+	structMap, structPtrs := MakeStructMapping(typ)
 	return &mappingCache{
 		typ:         typ,
-		structMap:   MakeStructMapping(typ),
+		structMap:   structMap,
+		structPtrs:  structPtrs,
 		colMappings: make(map[string][]uint64),
 	}
 }
 
-func (b *mappingCache) mapping(cols []string) ([]uint64, error) {
+func (b *mappingCache) mapping(cols []string, sequentialMapping bool) ([]uint64, error) {
+	if sequentialMapping {
+		return b.structPtrs, nil
+	}
+
 	buf := strmangle.GetBuffer()
 	defer strmangle.PutBuffer(buf)
 
@@ -803,7 +830,7 @@ var specialWordReplacer = strings.NewReplacer(
 
 // unTitleCase attempts to undo a title-cased string.
 //
-// DO NOT USE THIS METHOD IF YOU CAN AVOID IT
+// # DO NOT USE THIS METHOD IF YOU CAN AVOID IT
 //
 // Normally this would be easy but we have to deal with uppercased words
 // of varying lengths. We almost never use this function so it

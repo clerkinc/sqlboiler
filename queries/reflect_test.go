@@ -12,10 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/volatiletech/sqlboiler/v4/drivers"
-	"github.com/volatiletech/null/v8"
-
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/clerkinc/sqlboiler/v4/drivers"
+	"github.com/volatiletech/null/v8"
 )
 
 func bin64(i uint64) string {
@@ -211,7 +210,7 @@ func TestMakeStructMapping(t *testing.T) {
 		} `boil:",bind"`
 	}{}
 
-	got := MakeStructMapping(reflect.TypeOf(testStruct))
+	got, _ := MakeStructMapping(reflect.TypeOf(testStruct))
 
 	expectMap := map[string]uint64{
 		"different":           testMakeMapping(0),

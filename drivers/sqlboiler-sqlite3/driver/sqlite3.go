@@ -9,8 +9,8 @@ import (
 	"io/fs"
 	"strings"
 
-	"github.com/volatiletech/sqlboiler/v4/drivers"
-	"github.com/volatiletech/sqlboiler/v4/importers"
+	"github.com/clerkinc/sqlboiler/v4/drivers"
+	"github.com/clerkinc/sqlboiler/v4/importers"
 	_ "modernc.org/sqlite"
 )
 
@@ -575,8 +575,8 @@ func (SQLiteDriver) Imports() (col importers.Collection, err error) {
 				`"strings"`,
 			},
 			ThirdParty: importers.List{
+				`"github.com/clerkinc/sqlboiler/v4/drivers"`,
 				`"github.com/volatiletech/strmangle"`,
-				`"github.com/volatiletech/sqlboiler/v4/drivers"`,
 			},
 		},
 	}
@@ -660,14 +660,14 @@ func (SQLiteDriver) Imports() (col importers.Collection, err error) {
 			Standard: importers.List{`"time"`},
 		},
 		"types.Decimal": {
-			ThirdParty: importers.List{`"github.com/volatiletech/sqlboiler/v4/types"`},
+			ThirdParty: importers.List{`"github.com/clerkinc/sqlboiler/v4/types"`},
 		},
 		"types.NullDecimal": {
-			ThirdParty: importers.List{`"github.com/volatiletech/sqlboiler/v4/types"`},
+			ThirdParty: importers.List{`"github.com/clerkinc/sqlboiler/v4/types"`},
 		},
 
 		"types.JSON": {
-			ThirdParty: importers.List{`"github.com/volatiletech/sqlboiler/v4/types"`},
+			ThirdParty: importers.List{`"github.com/clerkinc/sqlboiler/v4/types"`},
 		},
 		"null.JSON": {
 			ThirdParty: importers.List{`"github.com/volatiletech/null/v8"`},

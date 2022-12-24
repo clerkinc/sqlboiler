@@ -12,8 +12,8 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/clerkinc/sqlboiler/v4/importers"
 	"github.com/friendsofgo/errors"
-	"github.com/volatiletech/sqlboiler/v4/importers"
 )
 
 // Copied from the go source

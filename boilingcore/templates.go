@@ -13,8 +13,8 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/clerkinc/sqlboiler/v4/drivers"
 	"github.com/friendsofgo/errors"
-	"github.com/volatiletech/sqlboiler/v4/drivers"
 	"github.com/volatiletech/strmangle"
 )
 
